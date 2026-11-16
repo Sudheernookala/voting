@@ -27,8 +27,27 @@ Participants don't create accounts. This only gives each phone a hidden ID, so t
 3. Go to **Settings → Pages → Source: Deploy from a branch → `main` / `(root)` → Save.**
 4. After about a minute, the app is live at `https://<your-username>.github.io/livevote/`.
 
+## Who can host (Google sign-in)
+Only people on the **host list** can create meetings. Everyone else can only join.
+Participants never need an account.
+
+**One-time setup:**
+1. Firebase → **Authentication → Sign-in method → Add new provider → Google → Enable**. Pick your support email, then **Save**.
+2. Firebase → **Authentication → Settings → Authorized domains → Add domain** → `sudheernookala.github.io`.
+3. Firebase → **Realtime Database → Rules**: paste the latest `database.rules.json` → **Publish**.
+4. Add yourself as the first host: **Realtime Database → Data** → hover the top line → **+**.
+   - Key: your Gmail address with every `.` replaced by `,` (e.g. `john.smith@gmail.com` becomes `john,smith@gmail,com`). Use lowercase.
+   - Value: `true`. Click **Add**.
+
+**Adding more hosts later:** sign in on the site (the "Host sign-in" link at the bottom), then use the **Manage hosts** box:
+type their Gmail address and click **Add host**. To remove someone, click **Remove**.
+You can also do it in Firebase → Realtime Database → Data → `admins`, using the same `,` format.
+
+Note: a host link (the private link shown on the dashboard) still gives full control of that one meeting,
+to whoever has it, even without signing in. Use it to let a co-host run a meeting from another device.
+
 ## Using it
-- **Host:** open the site and click **Create meeting**. You'll see a QR code, a join code, and a private host link. Keep the host link private.
+- **Host:** open the site, click **Host sign-in** at the bottom, then **Create meeting**. You'll see a QR code, a join code, and a private host link. Keep the host link private.
 - **Participants:** scan the QR code, enter their name, and wait. Votes and feedback forms appear on their screen automatically.
 - **Results:** bars, winner or tie, turnout, who voted for whom, and who hasn't voted. Use **Export results (CSV)** to download everything.
 

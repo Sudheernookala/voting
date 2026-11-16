@@ -105,3 +105,5 @@ summary { cursor: pointer; color: var(--brand); font-weight: 600; }
 .toast.err { background: var(--red); }
 .share svg { width: 200px; height: 200px; background: #fff; border-radius: 10px; border: 1px solid var(--line); }
 .round-title { margin: 16px 0 4px; font-weight: 700; }
+.host-list { list-style: none; padding: 0; margin: 10px 0 14px; }
+.host-list li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid var(--line); word-break: break-all; }

@@ -1,6 +1,6 @@
-import { firebaseConfig } from './firebase-config.js?v=2';
+import { firebaseConfig } from './firebase-config.js?v=3';
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js';
-import { getAuth, signInAnonymously, onAuthStateChanged, connectAuthEmulator } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js';
+import { getAuth, signInAnonymously, connectAuthEmulator, GoogleAuthProvider, signInWithPopup, signOut } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js';
 import {
   getDatabase, ref, onValue, set, update, get, remove, push, serverTimestamp, onDisconnect, connectDatabaseEmulator,
 } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js';
@@ -44,14 +44,20 @@ const r = path => ref(db, path);
 const conn = document.getElementById('conn');
 onValue(r('.info/connected'), s => { conn.className = 'conn ' + (s.val() ? 'on' : 'off'); });
 
-const uid = await new Promise((resolve, reject) => {
-  const stop = onAuthStateChanged(auth, u => { if (u) { stop(); resolve(u.uid); } });
-  signInAnonymously(auth).catch(e => {
+// Keep an existing sign-in (e.g. a host signed in with Google); otherwise sign in anonymously.
+await auth.authStateReady();
+if (!auth.currentUser) {
+  try { await signInAnonymously(auth); } catch (e) {
     $app.innerHTML = `<div class="narrow card"><h2>Can't connect</h2><p>${esc(e.message)}</p>
       <p class="muted">Check that Anonymous sign-in is enabled in Firebase → Authentication → Sign-in method.</p></div>`;
-    reject(e);
-  });
-});
+    throw e;
+  }
+}
+const user = auth.currentUser;
+const uid = user.uid;
+// Firebase keys can't contain "." so emails are stored with "," instead (same as the security rules).
+const emailKey = e => e.trim().toLowerCase().replace(/\./g, ',');
+const keyToEmail = k => k.replace(/,/g, '.');
 
 // ---------- router ----------
 const params = new URLSearchParams(location.search);
@@ -77,13 +83,26 @@ async function createMeeting(title) {
   }
 }
 
-function homePage() {
-  $app.innerHTML = `
-    <div class="narrow">
-      <div class="hero">
-        <h1>Live voting for your meeting</h1>
-        <p class="muted">Create categories, share a QR code, and watch votes arrive in real time.</p>
-      </div>
+async function homePage() {
+  // Is this a Google-signed-in host on the allowed list? (Only allowed hosts can read the list.)
+  let isHost = false;
+  if (!user.isAnonymous) isHost = await get(r('admins')).then(() => true, () => false);
+
+  const joinCard = `
+      <div class="card">
+        <h2>Join a vote</h2>
+        <form id="joinForm" class="row">
+          <input id="jcode" placeholder="Enter 6-letter code" maxlength="6" style="flex:1;text-transform:uppercase;letter-spacing:.15em" required>
+          <button class="btn">Join</button>
+        </form>
+        <p class="small muted" style="margin:8px 0 0">Or scan the QR code shown by the host.</p>
+      </div>`;
+  const account = !user.isAnonymous
+    ? `<p class="small muted" style="text-align:center">Signed in as <b>${esc(user.email)}</b> · <a href="#" id="signOut">Sign out</a></p>` : '';
+
+  let hostCards = '';
+  if (isHost) {
+    hostCards = `
       <div class="card">
         <h2>Host a meeting</h2>
         <form id="createForm">
@@ -93,15 +112,48 @@ function homePage() {
           <button class="btn block">Create meeting</button>
         </form>
       </div>
-      <p class="or">or</p>
       <div class="card">
-        <h2>Join a vote</h2>
-        <form id="joinForm" class="row">
-          <input id="jcode" placeholder="Enter 6-letter code" maxlength="6" style="flex:1;text-transform:uppercase;letter-spacing:.15em" required>
-          <button class="btn ghost">Join</button>
+        <h2>Manage hosts</h2>
+        <p class="small muted">People on this list can sign in with Google and create meetings.</p>
+        <ul class="host-list" id="adminList"><li class="muted">Loading…</li></ul>
+        <form id="adminForm" class="row">
+          <input id="adminEmail" type="email" placeholder="colleague@gmail.com" style="flex:1" required>
+          <button class="btn ghost">Add host</button>
         </form>
+      </div>`;
+  } else if (!user.isAnonymous) {
+    hostCards = `<div class="card"><h2>Not allowed to host</h2>
+      <p><b>${esc(user.email)}</b> isn't on the host list. Ask the owner to add this email under “Manage hosts”.</p></div>`;
+  }
+
+  $app.innerHTML = `
+    <div class="narrow">
+      <div class="hero">
+        <h1>Live voting for your meeting</h1>
+        <p class="muted">${isHost ? 'Create a meeting, share the QR code, and watch votes arrive in real time.' : 'Enter the code from your host to join.'}</p>
       </div>
+      ${isHost ? hostCards + joinCard : joinCard + hostCards}
+      ${account}
+      ${user.isAnonymous ? '<p class="small" style="text-align:center;margin-top:24px"><a href="#" id="hostSignIn">Host sign-in</a></p>' : ''}
     </div>`;
+
+  document.getElementById('joinForm').onsubmit = e => {
+    e.preventDefault();
+    location.href = `${BASE}?join=${document.getElementById('jcode').value.trim().toUpperCase()}`;
+  };
+  document.getElementById('hostSignIn')?.addEventListener('click', async e => {
+    e.preventDefault();
+    try { await signInWithPopup(auth, new GoogleAuthProvider()); location.reload(); }
+    catch (err) {
+      if (/popup-closed|cancelled-popup/.test(err.code)) return;
+      toast(/unauthorized-domain/.test(err.code) ? 'This website is not in Firebase “Authorized domains” yet' : niceError(err), true);
+    }
+  });
+  document.getElementById('signOut')?.addEventListener('click', async e => {
+    e.preventDefault(); await signOut(auth); location.reload();
+  });
+  if (!isHost) return;
+
   document.getElementById('createForm').onsubmit = async e => {
     e.preventDefault();
     const btn = e.target.querySelector('button'); btn.disabled = true; btn.textContent = 'Creating…';
@@ -111,9 +163,25 @@ function homePage() {
       location.href = `${BASE}?host=${code}&key=${key}`;
     } catch (err) { toast(niceError(err), true); btn.disabled = false; btn.textContent = 'Create meeting'; }
   };
-  document.getElementById('joinForm').onsubmit = e => {
+
+  const myKey = emailKey(user.email);
+  onValue(r('admins'), snap => {
+    const keys = Object.keys(snap.val() || {}).sort();
+    document.getElementById('adminList').innerHTML = keys.map(k => `<li><span>${esc(keyToEmail(k))}${k === myKey ? ' <span class="muted">(you)</span>' : ''}</span>
+      ${k === myKey ? '' : `<button class="btn sm red" data-remove="${esc(k)}">Remove</button>`}</li>`).join('');
+  });
+  document.getElementById('adminList').onclick = async e => {
+    const k = e.target.dataset.remove;
+    if (!k || !confirm(`Remove ${keyToEmail(k)} as a host?`)) return;
+    try { await remove(r(`admins/${k}`)); toast('Host removed'); } catch (err) { toast(niceError(err), true); }
+  };
+  document.getElementById('adminForm').onsubmit = async e => {
     e.preventDefault();
-    location.href = `${BASE}?join=${document.getElementById('jcode').value.trim().toUpperCase()}`;
+    const inp = document.getElementById('adminEmail');
+    const email = inp.value.trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return toast('Enter a valid email', true);
+    try { await set(r(`admins/${emailKey(email)}`), true); inp.value = ''; toast(`${email} can now host`); }
+    catch (err) { toast(niceError(err), true); }
   };
 }
 

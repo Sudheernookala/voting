@@ -1,9 +1,16 @@
 {
   "rules": {
+    "admins": {
+      ".read": "auth != null && auth.token.email_verified == true && root.child('admins/' + auth.token.email.toLowerCase().replace('.', ',')).exists()",
+      ".write": "auth != null && auth.token.email_verified == true && root.child('admins/' + auth.token.email.toLowerCase().replace('.', ',')).exists()",
+      "$email": {
+        ".validate": "newData.isBoolean() && $email.matches(/^[^@]+@[^@]+$/)"
+      }
+    },
     "hostSecrets": {
       "$code": {
         ".read": false,
-        ".write": "auth != null && !data.exists()",
+        ".write": "!data.exists() && auth != null && auth.token.email_verified == true && root.child('admins/' + auth.token.email.toLowerCase().replace('.', ',')).exists()",
         ".validate": "newData.isString() && newData.val().length >= 20 && newData.val().length <= 64"
       }
     },
@@ -13,11 +20,16 @@
           ".read": "auth != null",
           ".write": "auth != null && !data.exists() && $code.matches(/^[A-Z2-9]{6}$/)",
           ".validate": "newData.hasChildren(['title', 'createdAt']) && newData.parent().child('hosts/' + auth.uid).exists()",
-          "title": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 100" },
-          "createdAt": { ".validate": "newData.isNumber()" },
-          "$other": { ".validate": false }
+          "title": {
+            ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 100"
+          },
+          "createdAt": {
+            ".validate": "newData.isNumber()"
+          },
+          "$other": {
+            ".validate": false
+          }
         },
-
         "hosts": {
           "$uid": {
             ".read": "auth != null && auth.uid === $uid",
@@ -25,39 +37,56 @@
             ".validate": "newData.isString() && newData.val() === newData.parent().parent().parent().parent().child('hostSecrets/' + $code).val()"
           }
         },
-
         "categories": {
           ".read": "auth != null",
           "$cat": {
             ".write": "auth != null && root.child('meetings/' + $code + '/hosts/' + auth.uid).exists()",
             ".validate": "newData.hasChildren(['title', 'status', 'createdAt', 'options'])",
-            "title": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 100" },
-            "status": { ".validate": "newData.val() === 'draft' || newData.val() === 'open' || newData.val() === 'closed'" },
-            "createdAt": { ".validate": "newData.isNumber()" },
+            "title": {
+              ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 100"
+            },
+            "status": {
+              ".validate": "newData.val() === 'draft' || newData.val() === 'open' || newData.val() === 'closed'"
+            },
+            "createdAt": {
+              ".validate": "newData.isNumber()"
+            },
             "options": {
               "$opt": {
                 ".validate": "newData.hasChildren(['label', 'order'])",
-                "label": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 80" },
-                "order": { ".validate": "newData.isNumber()" },
-                "$other": { ".validate": false }
+                "label": {
+                  ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 80"
+                },
+                "order": {
+                  ".validate": "newData.isNumber()"
+                },
+                "$other": {
+                  ".validate": false
+                }
               }
             },
-            "$other": { ".validate": false }
+            "$other": {
+              ".validate": false
+            }
           }
         },
-
         "voters": {
           ".read": "auth != null && root.child('meetings/' + $code + '/hosts/' + auth.uid).exists()",
           "$uid": {
             ".read": "auth != null && auth.uid === $uid",
             ".write": "auth != null && auth.uid === $uid && root.child('meetings/' + $code + '/info').exists()",
             ".validate": "newData.hasChildren(['name', 'joinedAt'])",
-            "name": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 40" },
-            "joinedAt": { ".validate": "newData.isNumber()" },
-            "$other": { ".validate": false }
+            "name": {
+              ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 40"
+            },
+            "joinedAt": {
+              ".validate": "newData.isNumber()"
+            },
+            "$other": {
+              ".validate": false
+            }
           }
         },
-
         "ballots": {
           ".read": "auth != null && root.child('meetings/' + $code + '/hosts/' + auth.uid).exists()",
           "$uid": {
@@ -68,17 +97,23 @@
             }
           }
         },
-
         "feedback": {
           ".read": "auth != null",
           ".write": "auth != null && root.child('meetings/' + $code + '/hosts/' + auth.uid).exists()",
           ".validate": "newData.hasChildren(['status', 'round', 'question'])",
-          "status": { ".validate": "newData.val() === 'open' || newData.val() === 'closed'" },
-          "round": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 20" },
-          "question": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 300" },
-          "$other": { ".validate": false }
+          "status": {
+            ".validate": "newData.val() === 'open' || newData.val() === 'closed'"
+          },
+          "round": {
+            ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 20"
+          },
+          "question": {
+            ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 300"
+          },
+          "$other": {
+            ".validate": false
+          }
         },
-
         "responses": {
           ".read": "auth != null && root.child('meetings/' + $code + '/hosts/' + auth.uid).exists()",
           "$round": {
@@ -86,16 +121,27 @@
               ".read": "auth != null && auth.uid === $uid",
               ".write": "auth != null && auth.uid === $uid && !data.exists() && root.child('meetings/' + $code + '/feedback/status').val() === 'open' && root.child('meetings/' + $code + '/feedback/round').val() === $round && root.child('meetings/' + $code + '/voters/' + $uid).exists()",
               ".validate": "newData.hasChildren(['name', 'q', 'at']) && (newData.hasChild('rating') || newData.hasChild('comment'))",
-              "name": { ".validate": "newData.val() === root.child('meetings/' + $code + '/voters/' + $uid + '/name').val()" },
-              "q": { ".validate": "newData.val() === root.child('meetings/' + $code + '/feedback/question').val()" },
-              "rating": { ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 5" },
-              "comment": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 1000" },
-              "at": { ".validate": "newData.isNumber()" },
-              "$other": { ".validate": false }
+              "name": {
+                ".validate": "newData.val() === root.child('meetings/' + $code + '/voters/' + $uid + '/name').val()"
+              },
+              "q": {
+                ".validate": "newData.val() === root.child('meetings/' + $code + '/feedback/question').val()"
+              },
+              "rating": {
+                ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 5"
+              },
+              "comment": {
+                ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 1000"
+              },
+              "at": {
+                ".validate": "newData.isNumber()"
+              },
+              "$other": {
+                ".validate": false
+              }
             }
           }
         },
-
         "online": {
           ".read": "auth != null && root.child('meetings/' + $code + '/hosts/' + auth.uid).exists()",
           "$uid": {
