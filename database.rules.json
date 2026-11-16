@@ -1,0 +1,109 @@
+{
+  "rules": {
+    "hostSecrets": {
+      "$code": {
+        ".read": false,
+        ".write": "auth != null && !data.exists()",
+        ".validate": "newData.isString() && newData.val().length >= 20 && newData.val().length <= 64"
+      }
+    },
+    "meetings": {
+      "$code": {
+        "info": {
+          ".read": "auth != null",
+          ".write": "auth != null && !data.exists() && $code.matches(/^[A-Z2-9]{6}$/)",
+          ".validate": "newData.hasChildren(['title', 'createdAt']) && newData.parent().child('hosts/' + auth.uid).exists()",
+          "title": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 100" },
+          "createdAt": { ".validate": "newData.isNumber()" },
+          "$other": { ".validate": false }
+        },
+
+        "hosts": {
+          "$uid": {
+            ".read": "auth != null && auth.uid === $uid",
+            ".write": "auth != null && auth.uid === $uid",
+            ".validate": "newData.isString() && newData.val() === newData.parent().parent().parent().parent().child('hostSecrets/' + $code).val()"
+          }
+        },
+
+        "categories": {
+          ".read": "auth != null",
+          "$cat": {
+            ".write": "auth != null && root.child('meetings/' + $code + '/hosts/' + auth.uid).exists()",
+            ".validate": "newData.hasChildren(['title', 'status', 'createdAt', 'options'])",
+            "title": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 100" },
+            "status": { ".validate": "newData.val() === 'draft' || newData.val() === 'open' || newData.val() === 'closed'" },
+            "createdAt": { ".validate": "newData.isNumber()" },
+            "options": {
+              "$opt": {
+                ".validate": "newData.hasChildren(['label', 'order'])",
+                "label": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 80" },
+                "order": { ".validate": "newData.isNumber()" },
+                "$other": { ".validate": false }
+              }
+            },
+            "$other": { ".validate": false }
+          }
+        },
+
+        "voters": {
+          ".read": "auth != null && root.child('meetings/' + $code + '/hosts/' + auth.uid).exists()",
+          "$uid": {
+            ".read": "auth != null && auth.uid === $uid",
+            ".write": "auth != null && auth.uid === $uid && root.child('meetings/' + $code + '/info').exists()",
+            ".validate": "newData.hasChildren(['name', 'joinedAt'])",
+            "name": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 40" },
+            "joinedAt": { ".validate": "newData.isNumber()" },
+            "$other": { ".validate": false }
+          }
+        },
+
+        "ballots": {
+          ".read": "auth != null && root.child('meetings/' + $code + '/hosts/' + auth.uid).exists()",
+          "$uid": {
+            ".read": "auth != null && auth.uid === $uid",
+            "$cat": {
+              ".write": "auth != null && auth.uid === $uid && !data.exists() && root.child('meetings/' + $code + '/categories/' + $cat + '/status').val() === 'open' && root.child('meetings/' + $code + '/voters/' + $uid).exists()",
+              ".validate": "newData.isString() && root.child('meetings/' + $code + '/categories/' + $cat + '/options/' + newData.val()).exists()"
+            }
+          }
+        },
+
+        "feedback": {
+          ".read": "auth != null",
+          ".write": "auth != null && root.child('meetings/' + $code + '/hosts/' + auth.uid).exists()",
+          ".validate": "newData.hasChildren(['status', 'round', 'question'])",
+          "status": { ".validate": "newData.val() === 'open' || newData.val() === 'closed'" },
+          "round": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 20" },
+          "question": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 300" },
+          "$other": { ".validate": false }
+        },
+
+        "responses": {
+          ".read": "auth != null && root.child('meetings/' + $code + '/hosts/' + auth.uid).exists()",
+          "$round": {
+            "$uid": {
+              ".read": "auth != null && auth.uid === $uid",
+              ".write": "auth != null && auth.uid === $uid && !data.exists() && root.child('meetings/' + $code + '/feedback/status').val() === 'open' && root.child('meetings/' + $code + '/feedback/round').val() === $round && root.child('meetings/' + $code + '/voters/' + $uid).exists()",
+              ".validate": "newData.hasChildren(['name', 'q', 'at']) && (newData.hasChild('rating') || newData.hasChild('comment'))",
+              "name": { ".validate": "newData.val() === root.child('meetings/' + $code + '/voters/' + $uid + '/name').val()" },
+              "q": { ".validate": "newData.val() === root.child('meetings/' + $code + '/feedback/question').val()" },
+              "rating": { ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 5" },
+              "comment": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 1000" },
+              "at": { ".validate": "newData.isNumber()" },
+              "$other": { ".validate": false }
+            }
+          }
+        },
+
+        "online": {
+          ".read": "auth != null && root.child('meetings/' + $code + '/hosts/' + auth.uid).exists()",
+          "$uid": {
+            ".write": "auth != null && auth.uid === $uid",
+            ".validate": "newData.isBoolean()"
+          }
+        }
+      }
+    }
+  }
+}
