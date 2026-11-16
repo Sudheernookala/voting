@@ -1,11 +1,11 @@
-// STEP: replace this whole object with the config from
-// Firebase console → Project settings → General → Your apps → Web app → "SDK setup and configuration" → Config.
-// Create the Realtime Database FIRST, so the config includes "databaseURL".
-// These values are not secret — they are safe to commit. Security comes from database.rules.json.
+// Firebase project settings. These values are public by design — they are safe to commit.
+// Security comes from database.rules.json (published in Firebase → Realtime Database → Rules).
 export const firebaseConfig = {
-  apiKey: "PASTE_YOUR_API_KEY",
-  authDomain: "your-project.firebaseapp.com",
-  databaseURL: "https://your-project-default-rtdb.firebaseio.com",
-  projectId: "your-project",
-  appId: "PASTE_YOUR_APP_ID",
+  apiKey: "AIzaSyBWDAQO3c0wExiwsrcXEITjW22tz1gJ7A0",
+  authDomain: "voting-3930a.firebaseapp.com",
+  databaseURL: "https://voting-3930a-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "voting-3930a",
+  storageBucket: "voting-3930a.firebasestorage.app",
+  messagingSenderId: "353576338913",
+  appId: "1:353576338913:web:68c240c2ebab21c277fea0",
 };
