@@ -46,6 +46,17 @@ You can also do it in Firebase → Realtime Database → Data → `admins`, usin
 Note: a host link (the private link shown on the dashboard) still gives full control of that one meeting,
 to whoever has it, even without signing in. Use it to let a co-host run a meeting from another device.
 
+## Past meetings and automatic deletion
+- Signed-in hosts see **Your meetings** on the home page, with **Open** and **Delete** buttons.
+  The list follows your Google account, so it works on any device.
+- Meetings are **deleted automatically 30 days after creation**. Export the CSV first if you need the results.
+- There's no server, so cleanup runs whenever any host opens the home page.
+  If nobody visits for a while, old meetings are removed on the next visit.
+- Meetings created before this feature was added aren't in the cleanup list. Delete them by hand under
+  Realtime Database → Data → `meetings`.
+- To change 30 days to another number: edit `KEEP_DAYS` in `app.js`, **and** change `2592000000` (30 days in
+  milliseconds) in `database.rules.json`, then publish the rules again.
+
 ## Using it
 - **Host:** open the site, click **Host sign-in** at the bottom, then **Create meeting**. You'll see a QR code, a join code, and a private host link. Keep the host link private.
 - **Participants:** scan the QR code, enter their name, and wait. Votes and feedback forms appear on their screen automatically.

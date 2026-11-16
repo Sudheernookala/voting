@@ -7,10 +7,27 @@
         ".validate": "newData.isBoolean() && $email.matches(/^[^@]+@[^@]+$/)"
       }
     },
+    "meetingIndex": {
+      ".read": "auth != null && auth.token.email_verified == true && root.child('admins/' + auth.token.email.toLowerCase().replace('.', ',')).exists()",
+      ".indexOn": ".value",
+      "$code": {
+        ".write": "auth != null && auth.token.email_verified == true && root.child('admins/' + auth.token.email.toLowerCase().replace('.', ',')).exists() && (!data.exists() || !newData.exists())",
+        ".validate": "newData.isNumber()"
+      }
+    },
+    "hostMeetings": {
+      "$email": {
+        ".read": "auth != null && auth.token.email_verified == true && auth.token.email.toLowerCase().replace('.', ',') === $email",
+        ".write": "auth != null && auth.token.email_verified == true && auth.token.email.toLowerCase().replace('.', ',') === $email",
+        "$code": {
+          ".validate": "newData.hasChildren(['title', 'key', 'createdAt'])"
+        }
+      }
+    },
     "hostSecrets": {
       "$code": {
         ".read": false,
-        ".write": "!data.exists() && auth != null && auth.token.email_verified == true && root.child('admins/' + auth.token.email.toLowerCase().replace('.', ',')).exists()",
+        ".write": "auth != null && auth.token.email_verified == true && root.child('admins/' + auth.token.email.toLowerCase().replace('.', ',')).exists() && (!data.exists() || !newData.exists())",
         ".validate": "newData.isString() && newData.val().length >= 20 && newData.val().length <= 64"
       }
     },
@@ -148,7 +165,8 @@
             ".write": "auth != null && auth.uid === $uid",
             ".validate": "newData.isBoolean()"
           }
-        }
+        },
+        ".write": "!newData.exists() && auth != null && auth.token.email_verified == true && root.child('admins/' + auth.token.email.toLowerCase().replace('.', ',')).exists() && (data.child('hosts/' + auth.uid).exists() || data.child('info/createdAt').val() < now - 2592000000)"
       }
     }
   }

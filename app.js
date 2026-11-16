@@ -1,8 +1,9 @@
-import { firebaseConfig } from './firebase-config.js?v=3';
+import { firebaseConfig } from './firebase-config.js?v=4';
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js';
 import { getAuth, signInAnonymously, connectAuthEmulator, GoogleAuthProvider, signInWithPopup, signOut } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js';
 import {
   getDatabase, ref, onValue, set, update, get, remove, push, serverTimestamp, onDisconnect, connectDatabaseEmulator,
+  query, orderByValue, endAt, limitToFirst,
 } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js';
 
 // ---------- helpers ----------
@@ -58,6 +59,8 @@ const uid = user.uid;
 // Firebase keys can't contain "." so emails are stored with "," instead (same as the security rules).
 const emailKey = e => e.trim().toLowerCase().replace(/\./g, ',');
 const keyToEmail = k => k.replace(/,/g, '.');
+const KEEP_DAYS = 30;
+const DAY = 86400000;
 
 // ---------- router ----------
 const params = new URLSearchParams(location.search);
@@ -77,10 +80,32 @@ async function createMeeting(title) {
         [`hostSecrets/${code}`]: key,
         [`meetings/${code}/hosts/${uid}`]: key,
         [`meetings/${code}/info`]: { title, createdAt: serverTimestamp() },
+        [`meetingIndex/${code}`]: serverTimestamp(),                       // used for 30-day cleanup
+        [`hostMeetings/${emailKey(user.email)}/${code}`]: { title, key, createdAt: serverTimestamp() }, // "Your meetings" list
       });
       return { code, key };
     } catch (e) { if (attempt === 4) throw e; }
   }
+}
+
+// Deletes a meeting and everything linked to it. Allowed by the rules if it is older than
+// 30 days (any host) or if you are this meeting's host.
+function deleteMeeting(code) {
+  return update(r('/'), {
+    [`meetings/${code}`]: null, [`hostSecrets/${code}`]: null, [`meetingIndex/${code}`]: null,
+    [`hostMeetings/${emailKey(user.email)}/${code}`]: null,
+  });
+}
+
+// No server, so cleanup runs whenever a host opens the home page.
+async function cleanupOldMeetings() {
+  const cutoff = Date.now() - KEEP_DAYS * DAY - 60000; // 1 min margin for clock differences
+  const snap = await get(query(r('meetingIndex'), orderByValue(), endAt(cutoff), limitToFirst(50))).catch(() => null);
+  const codes = Object.keys(snap?.val() || {});
+  for (const code of codes) {
+    await update(r('/'), { [`meetings/${code}`]: null, [`hostSecrets/${code}`]: null, [`meetingIndex/${code}`]: null }).catch(() => {});
+  }
+  return codes.length;
 }
 
 async function homePage() {
@@ -111,6 +136,11 @@ async function homePage() {
           <div style="height:14px"></div>
           <button class="btn block">Create meeting</button>
         </form>
+      </div>
+      <div class="card">
+        <h2>Your meetings</h2>
+        <p class="small muted">Meetings are deleted automatically ${KEEP_DAYS} days after they were created. Export results before then if you need to keep them.</p>
+        <div id="myMeetings"><p class="muted">Loading…</p></div>
       </div>
       <div class="card">
         <h2>Manage hosts</h2>
@@ -165,6 +195,37 @@ async function homePage() {
   };
 
   const myKey = emailKey(user.email);
+
+  // --- Your meetings ---
+  cleanupOldMeetings();
+  const fmtDate = t => new Date(t).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+  onValue(r(`hostMeetings/${myKey}`), async snap => {
+    const list = Object.entries(snap.val() || {}).sort((a, b) => b[1].createdAt - a[1].createdAt);
+    const el = document.getElementById('myMeetings');
+    const live = [];
+    for (const [code, m] of list) {
+      const daysLeft = KEEP_DAYS - Math.floor((Date.now() - m.createdAt) / DAY);
+      if (daysLeft <= 0) { // past 30 days: drop it from the list if the meeting is already gone
+        const exists = await get(r(`meetings/${code}/info`)).then(x => x.exists(), () => false);
+        if (!exists) { remove(r(`hostMeetings/${myKey}/${code}`)).catch(() => {}); continue; }
+      }
+      live.push({ code, ...m, daysLeft });
+    }
+    el.innerHTML = live.length ? `<ul class="host-list">${live.map(m => `<li>
+        <span><b>${esc(m.title)}</b><br><span class="small muted">${fmtDate(m.createdAt)} · code ${m.code} ·
+          ${m.daysLeft > 0 ? `deletes in ${m.daysLeft} day${m.daysLeft === 1 ? '' : 's'}` : 'deleting soon'}</span></span>
+        <span class="row" style="flex-wrap:nowrap">
+          <a class="btn sm ghost" href="${BASE}?host=${m.code}&key=${m.key}">Open</a>
+          <button class="btn sm red" data-del="${m.code}" data-title="${esc(m.title)}">Delete</button>
+        </span></li>`).join('')}</ul>`
+      : '<p class="muted">No meetings yet.</p>';
+  });
+  document.getElementById('myMeetings').onclick = async e => {
+    const code = e.target.dataset.del;
+    if (!code || !confirm(`Delete “${e.target.dataset.title}” and all its votes and feedback? This can't be undone.`)) return;
+    try { await deleteMeeting(code); toast('Meeting deleted'); } catch (err) { toast(niceError(err), true); }
+  };
+
   onValue(r('admins'), snap => {
     const keys = Object.keys(snap.val() || {}).sort();
     document.getElementById('adminList').innerHTML = keys.map(k => `<li><span>${esc(keyToEmail(k))}${k === myKey ? ' <span class="muted">(you)</span>' : ''}</span>
