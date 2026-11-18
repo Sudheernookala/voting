@@ -145,7 +145,7 @@
           "$round": {
             "$uid": {
               ".read": "auth != null && auth.uid === $uid",
-              ".write": "auth != null && auth.uid === $uid && !data.exists() && root.child('meetings/' + $code + '/feedback/status').val() === 'open' && root.child('meetings/' + $code + '/feedback/round').val() === $round && root.child('meetings/' + $code + '/voters/' + $uid).exists()",
+              ".write": "(auth != null && auth.uid === $uid && !data.exists() && root.child('meetings/' + $code + '/feedback/status').val() === 'open' && root.child('meetings/' + $code + '/feedback/round').val() === $round && root.child('meetings/' + $code + '/voters/' + $uid).exists()) || (!newData.exists() && auth != null && root.child('meetings/' + $code + '/hosts/' + auth.uid).exists())",
               ".validate": "newData.hasChildren(['name', 'q', 'at']) && (newData.hasChild('rating') || newData.hasChild('comment'))",
               "name": {
                 ".validate": "newData.val() === root.child('meetings/' + $code + '/voters/' + $uid + '/name').val()"
@@ -165,7 +165,8 @@
               "$other": {
                 ".validate": false
               }
-            }
+            },
+            ".write": "!newData.exists() && auth != null && root.child('meetings/' + $code + '/hosts/' + auth.uid).exists()"
           }
         },
         "online": {

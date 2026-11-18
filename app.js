@@ -1,4 +1,4 @@
-import { firebaseConfig } from './firebase-config.js?v=5';
+import { firebaseConfig } from './firebase-config.js?v=6';
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js';
 import { getAuth, signInAnonymously, connectAuthEmulator, GoogleAuthProvider, signInWithPopup, signOut } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js';
 import {
@@ -441,6 +441,18 @@ async function hostPage(code, urlKey) {
     a.click(); URL.revokeObjectURL(a.href);
   };
 
+  // --- delete feedback (one response, or all responses to one question) ---
+  document.getElementById('fbResults').addEventListener('click', async e => {
+    const { delRound, delVid } = e.target.dataset;
+    if (!delRound) return;
+    const msg = delVid ? 'Delete this feedback? This can\'t be undone.' : 'Delete ALL responses to this question? This can\'t be undone.';
+    if (!confirm(msg)) return;
+    try {
+      await remove(r(`meetings/${code}/responses/${delRound}${delVid ? '/' + delVid : ''}`));
+      toast(delVid ? 'Feedback deleted' : 'All responses deleted');
+    } catch (err) { toast(niceError(err), true); }
+  });
+
   // --- feedback controls ---
   document.getElementById('fbControls').addEventListener('click', async e => {
     try {
@@ -513,14 +525,16 @@ async function hostPage(code, urlKey) {
     const stars = n => n ? '★'.repeat(n) + '☆'.repeat(5 - n) : '';
     const rounds = Object.entries(S.responses).sort((a, b) => b[0].localeCompare(a[0]));
     const total = rounds.reduce((n, [, x]) => n + Object.keys(x).length, 0);
-    const body = rounds.map(([, resp]) => {
-      const list = Object.values(resp).sort((a, b) => b.at - a.at);
+    const body = rounds.map(([round, resp]) => {
+      const list = Object.entries(resp).map(([vid, x]) => ({ vid, ...x })).sort((a, b) => b.at - a.at);
       const ratings = list.filter(x => x.rating).map(x => x.rating);
       const avg = ratings.length ? ratings.reduce((a, b) => a + b, 0) / ratings.length : null;
       return `<div class="round-title">“${esc(list[0]?.q)}” ${avg ? `<span class="stars-static">${stars(Math.round(avg))}</span> <b>${avg.toFixed(1)}</b>/5` : ''}
-          <span class="muted small">· ${plural(list.length, 'response')}</span></div>` +
+          <span class="muted small">· ${plural(list.length, 'response')}</span>
+          <button class="link-btn" data-del-round="${esc(round)}">Delete all</button></div>` +
         list.map(x => `<div class="fb-item"><div class="row"><b>${esc(x.name)}</b><span class="stars-static">${stars(x.rating)}</span>
-          <span class="spacer"></span><span class="small muted">${new Date(x.at).toLocaleTimeString()}</span></div>
+          <span class="spacer"></span><span class="small muted">${new Date(x.at).toLocaleTimeString()}</span>
+          <button class="link-btn" data-del-round="${esc(round)}" data-del-vid="${esc(x.vid)}" aria-label="Delete this feedback">Delete</button></div>
           ${x.comment ? `<div>${esc(x.comment)}</div>` : ''}</div>`).join('');
     }).join('');
     document.getElementById('fbResults').innerHTML = `<div class="row"><h2 style="margin:0">Feedback</h2><span class="spacer"></span>

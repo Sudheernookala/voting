@@ -114,3 +114,5 @@ label.check { display: flex; align-items: center; gap: 8px; font-weight: 600; ma
 label.check input { width: 18px; height: 18px; margin: 0; }
 input:disabled { background: var(--bg); color: var(--muted); }
 .share details { text-align: left; }
+.link-btn { background: none; border: 0; padding: 2px 4px; font: inherit; font-size: .82rem; color: var(--red); cursor: pointer; opacity: .75; }
+.link-btn:hover { opacity: 1; text-decoration: underline; }

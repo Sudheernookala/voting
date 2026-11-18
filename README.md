@@ -113,6 +113,12 @@ to whoever has it, even without signing in. Use it to let a co-host run a meetin
   The security rules block more picks than allowed and block picking the same option twice.
 - After pulling this update, publish the latest `database.rules.json` again.
 
+## Deleting feedback
+On the host dashboard, each feedback response has a **Delete** link, and each question has **Delete all**.
+Only that meeting's host can delete. Participants can't delete anyone's feedback, including their own.
+If feedback is still being collected, a person whose response you deleted is shown the form again.
+Click **Stop collecting feedback** first if you don't want that.
+
 ## Using it
 - **Host:** open the site, click **Host sign-in** at the bottom, then **Create meeting**. You'll see a QR code, a join code, and a private host link. Keep the host link private.
 - **Participants:** scan the QR code, enter their name, and wait. Votes and feedback forms appear on their screen automatically.
