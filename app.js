@@ -1,4 +1,4 @@
-import { firebaseConfig } from './firebase-config.js?v=4';
+import { firebaseConfig } from './firebase-config.js?v=5';
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js';
 import { getAuth, signInAnonymously, connectAuthEmulator, GoogleAuthProvider, signInWithPopup, signOut } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js';
 import {
@@ -247,20 +247,31 @@ async function homePage() {
 }
 
 // ================= HOST =================
+// A ballot is an option id (single choice) or {s0: id, s1: id, ...} (multiple choice).
+const picksOf = b => typeof b === 'string' ? [b] : (b && typeof b === 'object' ? [...new Set(Object.values(b))] : []);
+const maxPicks = c => Math.max(1, c?.multi || 1);
+// "Asha, Ravi + 2 anonymous"
+function fmtPeople(people) {
+  const named = people.filter(v => !v.anon).map(v => esc(v.name));
+  const anon = people.length - named.length;
+  return [...named, anon ? `<i>${anon} anonymous</i>` : ''].filter(Boolean).join(', ');
+}
+
 function computeResults(cat, catId, ballots, voters) {
-  const options = Object.entries(cat.options || {}).map(([id, o]) => ({ id, label: o.label, order: o.order, count: 0, voters: [] }))
+  const options = Object.entries(cat.options || {}).map(([id, o]) => ({ id, label: o.label, order: o.order, count: 0, people: [] }))
     .sort((a, b) => a.order - b.order);
   const byId = Object.fromEntries(options.map(o => [o.id, o]));
   const voted = new Set();
   for (const [vid, b] of Object.entries(ballots)) {
-    const o = byId[b?.[catId]];
-    if (!o) continue;
-    o.count++; o.voters.push(voters[vid]?.name || 'Unknown'); voted.add(vid);
+    const picks = picksOf(b?.[catId]).filter(id => byId[id]);
+    if (!picks.length) continue;
+    voted.add(vid);
+    for (const id of picks) { byId[id].count++; byId[id].people.push(voters[vid] || { name: 'Unknown' }); }
   }
-  const total = voted.size;
+  const total = voted.size; // people who voted (not picks)
   const max = Math.max(0, ...options.map(o => o.count));
   const winners = max > 0 ? options.filter(o => o.count === max).map(o => o.label) : [];
-  const notVoted = Object.entries(voters).filter(([vid]) => !voted.has(vid)).map(([, v]) => v.name);
+  const notVoted = Object.entries(voters).filter(([vid]) => !voted.has(vid)).map(([, v]) => v);
   return { options, total, max, winners, tie: winners.length > 1, notVoted };
 }
 
@@ -315,6 +326,11 @@ async function hostPage(code, urlKey) {
             </div>
             <p class="small muted" style="margin:6px 0 0">Tip: paste several names separated by commas or new lines.</p>
             <div class="chips" id="chips"></div>
+            <label for="cmulti">Each voter can choose</label>
+            <select id="cmulti">
+              <option value="1">One option</option>
+              ${[2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => `<option value="${n}">Up to ${n} options</option>`).join('')}
+            </select>
             <div style="height:14px"></div>
             <div class="row">
               <button class="btn green" data-open="1" style="flex:1">Create &amp; start voting</button>
@@ -377,13 +393,15 @@ async function hostPage(code, urlKey) {
     const title = document.getElementById('ctitle').value.trim().slice(0, 100);
     if (!title) return toast('Category name is required', true);
     if (options.length < 2) return toast('Add at least 2 options or participants', true);
+    const multi = Math.min(+document.getElementById('cmulti').value, options.length);
     try {
       await push(r(`meetings/${code}/categories`), {
         title, status: openNow ? 'open' : 'draft', createdAt: serverTimestamp(),
         options: Object.fromEntries(options.map((label, i) => ['o' + randHex(4), { label, order: i }])),
+        ...(multi > 1 ? { multi } : {}),
       });
       toast(openNow ? 'Voting started — participants can vote now' : 'Saved as draft');
-      document.getElementById('ctitle').value = ''; options = []; renderChips();
+      document.getElementById('ctitle').value = ''; document.getElementById('cmulti').value = '1'; options = []; renderChips();
     } catch (err) { toast(niceError(err), true); }
   };
 
@@ -408,8 +426,10 @@ async function hostPage(code, urlKey) {
     const rows = [['Category', 'Voter', 'Voted for']];
     for (const [cid, c] of Object.entries(S.categories)) {
       for (const [vid, b] of Object.entries(S.ballots)) {
-        const opt = c.options?.[b?.[cid]];
-        if (opt) rows.push([c.title, S.voters[vid]?.name || 'Unknown', opt.label]);
+        for (const id of picksOf(b?.[cid])) {
+          const opt = c.options?.[id];
+          if (opt) rows.push([c.title, S.voters[vid]?.name || 'Unknown', opt.label]);
+        }
       }
     }
     rows.push([], ['Feedback question', 'Name', 'Rating', 'Comment']);
@@ -454,23 +474,25 @@ async function hostPage(code, urlKey) {
           <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div></div>`;
       }).join('');
       let winner = '';
-      if (res.total && res.tie) winner = `<div class="winner tie">🤝 Tie between ${res.winners.map(esc).join(' & ')} (${res.max} votes each)</div>`;
+      if (res.total && res.tie) winner = `<div class="winner tie">🤝 Tie between ${res.winners.map(esc).join(' & ')} (${plural(res.max, 'vote')} each)</div>`;
       else if (res.total) winner = `<div class="winner">🏆 ${c.status === 'closed' ? 'Winner' : 'Leading'}: ${esc(res.winners[0])} with ${plural(res.max, 'vote')}</div>`;
       const badge = c.status === 'open' ? '<span class="badge open"><span class="pulse"></span>Live</span>'
         : `<span class="badge ${c.status}">${c.status}</span>`;
       const action = c.status === 'open'
         ? `<button class="btn sm" data-act="closed" data-id="${cid}">Close voting</button>`
         : `<button class="btn sm green" data-act="open" data-id="${cid}">${c.status === 'draft' ? 'Start voting' : 'Reopen'}</button>`;
-      const who = res.options.filter(o => o.voters.length).map(o =>
-        `<li><b>${esc(o.label)}:</b> ${o.voters.map(esc).join(', ')}</li>`).join('') || '<li>No votes yet</li>';
+      const who = res.options.filter(o => o.people.length).map(o =>
+        `<li><b>${esc(o.label)}:</b> ${fmtPeople(o.people)}</li>`).join('') || '<li>No votes yet</li>';
+      const mp = maxPicks(c);
       return `<div class="card">
         <div class="row"><h2 style="margin:0">${esc(c.title)}</h2>${badge}<span class="spacer"></span>${action}
           <button class="btn sm red" data-act="delete" data-id="${cid}">Delete</button></div>
-        <p class="muted small" style="margin:6px 0 0"><b>${plural(res.total, 'vote')}</b> received out of ${voterCount} joined · ${turnout}% turnout</p>
+        <p class="muted small" style="margin:6px 0 0"><b>${plural(res.total, 'vote')}</b> received out of ${voterCount} joined · ${turnout}% turnout${mp > 1
+          ? `<br>Multiple choice: up to ${mp} per person · % = share of voters who picked it` : ''}</p>
         ${bars}${winner}
         <details data-cat="${cid}" ${openDetails.has(cid) ? 'open' : ''}><summary>Verify: who voted for whom</summary>
           <ul class="voter-list">${who}</ul>
-          ${res.notVoted.length ? `<p class="small muted" style="margin-top:6px">Not voted yet: ${res.notVoted.map(esc).join(', ')}</p>` : ''}
+          ${res.notVoted.length ? `<p class="small muted" style="margin-top:6px">Not voted yet: ${fmtPeople(res.notVoted)}</p>` : ''}
         </details></div>`;
     }).join('');
   }
@@ -514,7 +536,9 @@ async function hostPage(code, urlKey) {
       document.title = (S.info.title || 'Meeting') + ' · Host';
       document.getElementById('sJoined').textContent = Object.keys(S.voters).length;
       document.getElementById('sOnline').textContent = Object.keys(S.online).length;
-      document.getElementById('joinedList').innerHTML = Object.values(S.voters).map(v => `<li>${esc(v.name)}</li>`).join('') || '<li>Nobody yet</li>';
+      const vs = Object.values(S.voters), anonCount = vs.filter(v => v.anon).length;
+      document.getElementById('joinedList').innerHTML = (vs.filter(v => !v.anon).map(v => `<li>${esc(v.name)}</li>`).join('') +
+        (anonCount ? `<li><i>${anonCount} anonymous</i></li>` : '')) || '<li>Nobody yet</li>';
       renderCats(); renderFeedback();
     });
   }
@@ -547,19 +571,24 @@ async function joinPage(code) {
       <form id="nameForm">
         <label for="vname">Your name</label>
         <input id="vname" placeholder="Enter your name" maxlength="40" required value="${esc(store.get('voterName') || '')}">
+        <label class="check"><input type="checkbox" id="vanon"> Join anonymously</label>
+        <p class="small muted" style="margin:0">The host sees “Anonymous” instead of your name. You can still vote only once.</p>
         ${err ? `<p style="color:var(--red)">${esc(err)}</p>` : ''}
         <div style="height:14px"></div>
         <button class="btn block">Join voting</button>
       </form></div>`;
     const inp = document.getElementById('vname'); inp.focus();
+    const anonBox = document.getElementById('vanon');
+    anonBox.onchange = () => { inp.disabled = anonBox.checked; inp.required = !anonBox.checked; };
     document.getElementById('nameForm').onsubmit = async e => {
       e.preventDefault();
-      const name = inp.value.trim().slice(0, 40);
+      const anon = anonBox.checked;
+      const name = anon ? 'Anonymous' : inp.value.trim().slice(0, 40);
       if (!name) return;
       try {
-        await set(r(`${base}/voters/${uid}`), { name, joinedAt: serverTimestamp() });
-        store.set('voterName', name);
-        me = { name };
+        await set(r(`${base}/voters/${uid}`), { name, joinedAt: serverTimestamp(), ...(anon ? { anon: true } : {}) });
+        if (!anon) store.set('voterName', name);
+        me = { name, anon };
         start();
       } catch (err) { showNameForm(niceError(err)); }
     };
@@ -596,7 +625,7 @@ async function joinPage(code) {
     const fbPending = S.feedback?.status === 'open' && !submitted();
     let html = `<div class="narrow">
       <div class="row" style="margin-bottom:12px"><div><div class="muted small">${esc(info.title)}</div>
-      <b>Hi, ${esc(me.name)} 👋</b></div><span class="spacer"></span>
+      <b>${me.anon ? 'Hi 👋 <span class="muted small">(voting anonymously)</span>' : `Hi, ${esc(me.name)} 👋`}</b></div><span class="spacer"></span>
       ${fbPending ? '<button class="btn sm" id="fbBtn">Give feedback</button>' : ''}</div>`;
 
     if (!open.length) {
@@ -606,24 +635,25 @@ async function joinPage(code) {
     }
     for (const [cid, c] of open) {
       const isNew = !seen.has(cid); seen.add(cid);
-      const mine = S.ballot[cid];
-      if (mine) {
+      const mine = picksOf(S.ballot[cid]).map(id => c.options?.[id]?.label).filter(Boolean);
+      if (mine.length) {
         html += `<div class="card ${isNew ? 'new-in' : ''}"><div class="row"><h2 style="margin:0">${esc(c.title)}</h2>
           <span class="badge open">Live</span></div><div style="height:10px"></div>
-          <div class="done">✓ Your vote for <b>${esc(c.options?.[mine]?.label)}</b> is recorded</div></div>`;
+          <div class="done">✓ Your vote for <b>${mine.map(esc).join(', ')}</b> is recorded</div></div>`;
         continue;
       }
+      const mp = maxPicks(c), sel = selected[cid] || [];
       html += `<div class="card ${isNew ? 'new-in' : ''}"><div class="row"><h2 style="margin:0">${esc(c.title)}</h2>
         <span class="badge open"><span class="pulse"></span>Vote now</span></div>
-        <p class="muted small" style="margin:4px 0 0">Choose one. You can vote only once.</p>
-        ${opts(c).map(o => `<button class="option ${selected[cid] === o.id ? 'sel' : ''}" data-cat="${cid}" data-opt="${o.id}">
+        <p class="muted small" style="margin:4px 0 0">${mp > 1 ? `Choose up to ${mp}.` : 'Choose one.'} You can vote only once.</p>
+        ${opts(c).map(o => `<button class="option ${mp > 1 ? 'multi' : ''} ${sel.includes(o.id) ? 'sel' : ''}" data-cat="${cid}" data-opt="${o.id}">
           <span class="radio"></span><span class="avatar">${esc(initials(o.label))}</span><span>${esc(o.label)}</span></button>`).join('')}
-        <button class="btn block" data-submit="${cid}" ${selected[cid] ? '' : 'disabled'}>Submit vote</button></div>`;
+        <button class="btn block" data-submit="${cid}" ${sel.length ? '' : 'disabled'}>Submit vote${mp > 1 ? ` (${sel.length} of ${mp} selected)` : ''}</button></div>`;
     }
     if (closed.length) {
       html += `<h3 class="muted" style="margin-top:20px">Closed</h3>` + closed.map(([cid, c]) => {
-        const o = c.options?.[S.ballot[cid]];
-        return `<div class="card small"><b>${esc(c.title)}</b> — ${o ? `you voted for ${esc(o.label)}` : 'you did not vote'} · voting closed</div>`;
+        const mine = picksOf(S.ballot[cid]).map(id => c.options?.[id]?.label).filter(Boolean);
+        return `<div class="card small"><b>${esc(c.title)}</b> — ${mine.length ? `you voted for ${mine.map(esc).join(', ')}` : 'you did not vote'} · voting closed</div>`;
       }).join('');
     }
     $app.innerHTML = html + '</div>';
@@ -633,13 +663,23 @@ async function joinPage(code) {
 
   $app.addEventListener('click', async e => {
     const opt = e.target.closest('.option');
-    if (opt) { selected[opt.dataset.cat] = opt.dataset.opt; render(); return; }
+    if (opt) {
+      const cid = opt.dataset.cat, id = opt.dataset.opt, mp = maxPicks(S.categories[cid]);
+      const sel = selected[cid] || [];
+      if (mp === 1) selected[cid] = [id];
+      else if (sel.includes(id)) selected[cid] = sel.filter(x => x !== id);
+      else if (sel.length >= mp) return toast(`You can choose up to ${mp}`, true);
+      else selected[cid] = [...sel, id];
+      render(); return;
+    }
     const sub = e.target.closest('[data-submit]');
     if (sub) {
       const cid = sub.dataset.submit;
       sub.disabled = true; sub.textContent = 'Sending…';
       try {
-        await set(r(`${base}/ballots/${uid}/${cid}`), selected[cid]);
+        const sel = selected[cid];
+        const ballot = maxPicks(S.categories[cid]) === 1 ? sel[0] : Object.fromEntries(sel.map((id, i) => ['s' + i, id]));
+        await set(r(`${base}/ballots/${uid}/${cid}`), ballot);
         delete selected[cid]; toast('Vote recorded ✓');
       } catch {
         toast('Vote not accepted — voting may be closed, or you already voted', true); render();

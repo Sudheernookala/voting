@@ -57,6 +57,14 @@ to whoever has it, even without signing in. Use it to let a co-host run a meetin
 - To change 30 days to another number: edit `KEEP_DAYS` in `app.js`, **and** change `2592000000` (30 days in
   milliseconds) in `database.rules.json`, then publish the rules again.
 
+## Anonymous voting and multiple choice
+- **Join anonymously:** participants can tick "Join anonymously" instead of typing a name. The host sees
+  "Anonymous" (e.g. "Priya: Asha, 2 anonymous"). One vote per person still applies.
+- **Multiple choice:** when creating a category, set "Each voter can choose" to "Up to N options" (2–10).
+  Percentages then mean "share of voters who picked it", so they can add up to more than 100%.
+  The security rules block more picks than allowed and block picking the same option twice.
+- After pulling this update, publish the latest `database.rules.json` again.
+
 ## Using it
 - **Host:** open the site, click **Host sign-in** at the bottom, then **Create meeting**. You'll see a QR code, a join code, and a private host link. Keep the host link private.
 - **Participants:** scan the QR code, enter their name, and wait. Votes and feedback forms appear on their screen automatically.

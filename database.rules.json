@@ -84,6 +84,9 @@
             },
             "$other": {
               ".validate": false
+            },
+            "multi": {
+              ".validate": "newData.isNumber() && newData.val() >= 2 && newData.val() <= 10 && newData.val() % 1 === 0"
             }
           }
         },
@@ -101,6 +104,9 @@
             },
             "$other": {
               ".validate": false
+            },
+            "anon": {
+              ".validate": "newData.isBoolean()"
             }
           }
         },
@@ -110,7 +116,10 @@
             ".read": "auth != null && auth.uid === $uid",
             "$cat": {
               ".write": "auth != null && auth.uid === $uid && !data.exists() && root.child('meetings/' + $code + '/categories/' + $cat + '/status').val() === 'open' && root.child('meetings/' + $code + '/voters/' + $uid).exists()",
-              ".validate": "newData.isString() && root.child('meetings/' + $code + '/categories/' + $cat + '/options/' + newData.val()).exists()"
+              ".validate": "(!root.child('meetings/' + $code + '/categories/' + $cat + '/multi').exists() && newData.isString() && root.child('meetings/' + $code + '/categories/' + $cat + '/options/' + newData.val()).exists()) || (root.child('meetings/' + $code + '/categories/' + $cat + '/multi').val() >= 2 && newData.hasChildren())",
+              "$slot": {
+                ".validate": "newData.isString() && root.child('meetings/' + $code + '/categories/' + $cat + '/options/' + newData.val()).exists() && (($slot === 's0' && root.child('meetings/' + $code + '/categories/' + $cat + '/multi').val() > 0) || ($slot === 's1' && root.child('meetings/' + $code + '/categories/' + $cat + '/multi').val() > 1) || ($slot === 's2' && root.child('meetings/' + $code + '/categories/' + $cat + '/multi').val() > 2) || ($slot === 's3' && root.child('meetings/' + $code + '/categories/' + $cat + '/multi').val() > 3) || ($slot === 's4' && root.child('meetings/' + $code + '/categories/' + $cat + '/multi').val() > 4) || ($slot === 's5' && root.child('meetings/' + $code + '/categories/' + $cat + '/multi').val() > 5) || ($slot === 's6' && root.child('meetings/' + $code + '/categories/' + $cat + '/multi').val() > 6) || ($slot === 's7' && root.child('meetings/' + $code + '/categories/' + $cat + '/multi').val() > 7) || ($slot === 's8' && root.child('meetings/' + $code + '/categories/' + $cat + '/multi').val() > 8) || ($slot === 's9' && root.child('meetings/' + $code + '/categories/' + $cat + '/multi').val() > 9)) && ($slot === 's0' || newData.parent().child('s0').val() !== newData.val()) && ($slot === 's1' || newData.parent().child('s1').val() !== newData.val()) && ($slot === 's2' || newData.parent().child('s2').val() !== newData.val()) && ($slot === 's3' || newData.parent().child('s3').val() !== newData.val()) && ($slot === 's4' || newData.parent().child('s4').val() !== newData.val()) && ($slot === 's5' || newData.parent().child('s5').val() !== newData.val()) && ($slot === 's6' || newData.parent().child('s6').val() !== newData.val()) && ($slot === 's7' || newData.parent().child('s7').val() !== newData.val()) && ($slot === 's8' || newData.parent().child('s8').val() !== newData.val()) && ($slot === 's9' || newData.parent().child('s9').val() !== newData.val())"
+              }
             }
           }
         },
