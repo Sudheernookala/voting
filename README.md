@@ -1,136 +1,123 @@
-# LiveVote: live meeting voting and feedback (GitHub Pages + Firebase, free)
+# LiveVote: live meeting voting and feedback (React + Firebase, free)
 
-No server needed. GitHub Pages hosts the screens, and Firebase stores votes and sends live updates.
+Hosts create voting categories during a meeting and share a QR code. Participants vote from their phones and see
+new votes and feedback forms appear instantly. Hosts get live results and can **reveal the winner** with a
+countdown and confetti on every screen.
+
+No server of our own: GitHub Pages hosts the app, and Firebase stores the data and sends live updates.
 Free limits (Firebase Spark plan): **100 people connected at the same time**, 1 GB of data, 10 GB of downloads a month.
+
+## Features
+- **Hosts** (Google sign-in, allow-list): create meetings, add categories (single or multiple choice), open, close or reopen voting,
+  see live results with turnout and "who voted for whom", **reveal the winner**, ask for and delete feedback,
+  export CSV, see past meetings, and manage the host list.
+- **Participants** (no account): join by QR code, link or code, with a name or anonymously. Vote once per category and give feedback.
+- **Winner reveal:** "And the winner is… 3, 2, 1" then the winner with confetti, on every phone and the host screen
+  at the same time. Ties show all tied winners. People who join later see the winner on the category card.
+- **Automatic cleanup:** meetings are deleted 30 days after creation.
 
 ## Tech stack
 
 | Part | Technology | What it does |
 |---|---|---|
-| Screens (front end) | Plain **HTML, CSS and JavaScript** (ES modules) | All pages: home, host dashboard, participant screen. No framework and no build step. |
-| Hosting | **GitHub Pages** | Serves the static files for free. |
-| Database and live updates | **Firebase Realtime Database** | Stores meetings, votes and feedback, and pushes changes to every screen instantly. |
-| Sign-in | **Firebase Authentication**: Anonymous + Google | Participants get a hidden anonymous ID (used for one vote per person). Hosts sign in with Google. |
-| Security | **Firebase Realtime Database Security Rules** (`database.rules.json`) | Enforces the rules the server used to: one vote per person, host-only controls, private ballots, the host allow-list, multi-choice limits, 30-day deletion. |
-| Firebase SDK | **Firebase JS SDK 12.19.0**, loaded from Google's CDN (`gstatic.com`) | Connects the browser to Firebase. |
-| QR codes | **qrcode-generator 2.0.4** (MIT licence), bundled as `qrcode.js` | Draws the join QR code in the browser. |
-| Testing (during development) | **Firebase Local Emulator Suite** + **Playwright** (headless Chromium) | Ran host and participant flows and attack attempts against the security rules. The test scripts are not part of this repo. |
+| Front end | **React 19 + TypeScript 5.9** | All screens: home, host dashboard, participant screen, winner reveal |
+| Build tool | **Vite 7** | Dev server and production build (`dist/`) |
+| Hosting | **GitHub Pages**, deployed by **GitHub Actions** | Every push to `main` builds and publishes automatically |
+| Database and live updates | **Firebase Realtime Database** | Stores meetings, votes and feedback, and pushes changes to every screen instantly |
+| Sign-in | **Firebase Authentication**: Anonymous + Google | Participants get a hidden anonymous ID (one vote per person). Hosts sign in with Google. |
+| Security | **Firebase Security Rules** (`database.rules.json`) | One vote per person, host-only controls, private ballots, host allow-list, multi-choice limits, reveal data checks, 30-day deletion |
+| Libraries | **firebase 12.19**, **qrcode-generator 2.0.4**, **canvas-confetti 1.9.4** | Firebase SDK, join QR code, confetti |
+| Tests | **Playwright 1.63** + **Firebase Local Emulator Suite** | End-to-end tests of host and participant flows, plus attack attempts against the real security rules |
 
 ### How it fits together
 ```
 Participant phone ─┐                          ┌─ Firebase Authentication (anonymous / Google)
-Host laptop ───────┼── static files from ─────┤
+Host laptop ───────┼── app files from ────────┤
                    │   GitHub Pages           └─ Firebase Realtime Database
                    └── live connection ──────────  (data + live updates, protected by security rules)
 ```
-There is no server of our own. The browser talks directly to Firebase, and the security rules are the only thing that stops cheating.
+The browser talks directly to Firebase. The security rules are the only thing that stops cheating, so they're tested automatically.
 
-### Files
-| File | Purpose |
+### Project layout
+| Path | Purpose |
 |---|---|
-| `index.html` | Page shell; loads the styles, QR library and app |
-| `app.js` | All app logic: home, host dashboard, participant screen, feedback, cleanup |
-| `style.css` | Look and layout (works on phones and laptops) |
-| `firebase-config.js` | Your Firebase project settings (public by design) |
+| `src/main.tsx`, `src/App.tsx` | Start-up and routing (`?join=CODE`, `?host=CODE&key=KEY`, home) |
+| `src/pages/Home.tsx` | Home: join box, host sign-in, create meeting, your meetings, manage hosts |
+| `src/pages/HostPage.tsx` | Host dashboard: QR code, categories and results, reveal, feedback |
+| `src/pages/JoinPage.tsx` | Participant screen: name or anonymous, voting, feedback form |
+| `src/components/RevealOverlay.tsx` | Winner reveal animation |
+| `src/lib.ts` | Data types, results calculation, meeting create, delete and cleanup, CSV export |
+| `src/hooks.tsx` | Live database hook, server clock, toast messages |
+| `src/firebase.ts`, `src/firebaseConfig.ts` | Firebase connection and project settings (public by design) |
+| `src/index.css` | Styles |
 | `database.rules.json` | Security rules: paste into Firebase → Realtime Database → Rules |
-| `firebase.json` | Config for the Firebase CLI / local emulator (optional) |
-| `qrcode.js` | QR code library |
+| `tests/` | End-to-end tests |
+| `.github/workflows/deploy.yml` | Builds and deploys to GitHub Pages |
 
 ### Data stored in Firebase
 | Path | Contents | Who can read it |
 |---|---|---|
 | `admins/` | Emails allowed to host | Hosts on the list |
-| `hostMeetings/<email>/` | Each host's list of their own meetings | That host only |
-| `meetingIndex/` | Meeting creation times, used for 30-day cleanup | Hosts |
+| `hostMeetings/<email>/` | Each host's own meetings | That host only |
+| `meetingIndex/` | Meeting creation times (for 30-day cleanup) | Hosts |
 | `hostSecrets/` | Host keys | Nobody (checked by the rules only) |
-| `meetings/<code>/info, categories, feedback` | Title, categories, options, feedback question | Anyone who has joined |
+| `meetings/<code>/info, categories, feedback` | Title, categories, options, revealed winner, feedback question | Anyone who has joined |
 | `meetings/<code>/voters, ballots, responses, online` | Names, votes, feedback answers, who's online | That meeting's host. Participants can only read their own. |
 
-### Free-plan limits (Firebase Spark)
-- 100 connections at once (open pages, across all meetings)
-- 1 GB stored
-- 10 GB downloaded per month
+## Development
+Requires Node.js 22+. Tests also need Java (for the Firebase emulator).
+```bash
+npm install
+npm run dev        # http://localhost:5173 (uses the real Firebase project)
+npm run build      # type-check and production build into dist/
+npm run test:e2e   # starts the Firebase emulators, then runs the Playwright tests
+```
 
-## Setup (about 15 minutes, one time)
+## Deploying
+Pushes to `main` deploy automatically through GitHub Actions. One-time setting:
+**GitHub → Settings → Pages → Build and deployment → Source: GitHub Actions.**
+Watch progress under the repository's **Actions** tab.
 
-### 1. Create a Firebase project
-1. Go to https://console.firebase.google.com and click **Create a project**. You can turn Google Analytics off.
+The build uses relative paths, so it also works on Firebase Hosting, Cloudflare Pages, Vercel or Netlify
+(build command `npm run build`, output folder `dist`). Add each new address under
+Firebase → Authentication → Settings → **Authorized domains**, or Google sign-in will fail there.
 
-### 2. Turn on anonymous sign-in
-**Build → Authentication → Get started → Sign-in method → Anonymous → Enable → Save.**
-Participants don't create accounts. This only gives each phone a hidden ID, so the app can allow one vote per person.
-
-### 3. Create the database and add the security rules
-1. **Build → Realtime Database → Create database.** Pick a location near you and choose **Start in locked mode**.
-2. Open the **Rules** tab. Delete everything there, paste the full contents of `database.rules.json`, and click **Publish**.
-   **Don't skip this step.** These rules are what stop people from voting twice, seeing other people's votes, or controlling your meeting.
-
-### 4. Connect the app to your project
-1. Click the gear icon, then **Project settings → General → Your apps**, then the **</>** (Web) icon. Give it any name and register it. You don't need Firebase Hosting.
-2. Copy the `firebaseConfig = { ... }` values into `firebase-config.js`. Make sure the config includes `databaseURL`. If it's missing, you created the app before the database. Refresh the settings page and copy the config again.
-
-### 5. Put it on GitHub Pages
-1. Create a **public** repository on GitHub, for example `livevote`.
-2. Click **Add file → Upload files** and upload every file in this folder.
-3. Go to **Settings → Pages → Source: Deploy from a branch → `main` / `(root)` → Save.**
-4. After about a minute, the app is live at `https://<your-username>.github.io/livevote/`.
-
-## Who can host (Google sign-in)
-Only people on the **host list** can create meetings. Everyone else can only join.
-Participants never need an account.
-
-**One-time setup:**
-1. Firebase → **Authentication → Sign-in method → Add new provider → Google → Enable**. Pick your support email, then **Save**.
-2. Firebase → **Authentication → Settings → Authorized domains → Add domain** → `sudheernookala.github.io`.
-3. Firebase → **Realtime Database → Rules**: paste the latest `database.rules.json` → **Publish**.
-4. Add yourself as the first host: **Realtime Database → Data** → hover the top line → **+**.
-   - Key: your Gmail address with every `.` replaced by `,` (e.g. `john.smith@gmail.com` becomes `john,smith@gmail,com`). Use lowercase.
-   - Value: `true`. Click **Add**.
-
-**Adding more hosts later:** sign in on the site (the "Host sign-in" link at the bottom), then use the **Manage hosts** box:
-type their Gmail address and click **Add host**. To remove someone, click **Remove**.
-You can also do it in Firebase → Realtime Database → Data → `admins`, using the same `,` format.
-
-Note: a host link (the private link shown on the dashboard) still gives full control of that one meeting,
-to whoever has it, even without signing in. Use it to let a co-host run a meeting from another device.
-
-## Past meetings and automatic deletion
-- Signed-in hosts see **Your meetings** on the home page, with **Open** and **Delete** buttons.
-  The list follows your Google account, so it works on any device.
-- Meetings are **deleted automatically 30 days after creation**. Export the CSV first if you need the results.
-- There's no server, so cleanup runs whenever any host opens the home page.
-  If nobody visits for a while, old meetings are removed on the next visit.
-- Meetings created before this feature was added aren't in the cleanup list. Delete them by hand under
-  Realtime Database → Data → `meetings`.
-- To change 30 days to another number: edit `KEEP_DAYS` in `app.js`, **and** change `2592000000` (30 days in
-  milliseconds) in `database.rules.json`, then publish the rules again.
-
-## Anonymous voting and multiple choice
-- **Join anonymously:** participants can tick "Join anonymously" instead of typing a name. The host sees
-  "Anonymous" (e.g. "Priya: Asha, 2 anonymous"). One vote per person still applies.
-- **Multiple choice:** when creating a category, set "Each voter can choose" to "Up to N options" (2–10).
-  Percentages then mean "share of voters who picked it", so they can add up to more than 100%.
-  The security rules block more picks than allowed and block picking the same option twice.
-- After pulling this update, publish the latest `database.rules.json` again.
-
-## Deleting feedback
-On the host dashboard, each feedback response has a **Delete** link, and each question has **Delete all**.
-Only that meeting's host can delete. Participants can't delete anyone's feedback, including their own.
-If feedback is still being collected, a person whose response you deleted is shown the form again.
-Click **Stop collecting feedback** first if you don't want that.
+## Firebase setup (one time)
+1. **Create a project** at https://console.firebase.google.com. Analytics can be off.
+2. **Sign-in methods:** Authentication → Sign-in method → enable **Anonymous** and **Google** (choose a support email for Google).
+3. **Authorized domains:** Authentication → Settings → Authorized domains → add your site's domain, e.g. `sudheernookala.github.io` (no `https://`, no path).
+4. **Database:** Realtime Database → Create database → *Start in locked mode*. Then open the **Rules** tab, paste the whole of
+   `database.rules.json`, and click **Publish**. **Publish again every time this file changes.**
+5. **App settings:** Project settings → Your apps → Web app → copy the config into `src/firebaseConfig.ts`
+   (it must include `databaseURL`).
+6. **First host:** Realtime Database → Data → **+** → key `admins`, then a child row with key = your Gmail in lowercase with every
+   `.` replaced by `,` (e.g. `john,smith@gmail,com`) and value `true` (boolean). Use the address exactly as your Google account reports it.
+   After that, add more hosts in the app under **Manage hosts** (normal email format).
 
 ## Using it
-- **Host:** open the site, click **Host sign-in** at the bottom, then **Create meeting**. You'll see a QR code, a join code, and a private host link. Keep the host link private.
-- **Participants:** scan the QR code, enter their name, and wait. Votes and feedback forms appear on their screen automatically.
-- **Results:** bars, winner or tie, turnout, who voted for whom, and who hasn't voted. Use **Export results (CSV)** to download everything.
+- **Host:** open the site → **Host sign-in** → **Create meeting**. Share the QR code. Add categories and start voting.
+  Click **🏆 Reveal winner** to close voting and show the winner on every screen. **Reveal again** replays it, and **Reopen** clears it.
+- **Participants:** scan the QR code, then type a name or tick **Join anonymously**. Keep the page open; votes, reveals and feedback forms appear automatically.
+- **Multiple choice:** "Each voter can choose: Up to N options" (2–10). Percentages mean "share of voters who picked it", so they can add up to more than 100%.
+- **Feedback:** **Ask for feedback** pops a form on every phone. Hosts can delete single responses or all responses.
+  If feedback is still open, someone whose response you deleted is asked again.
+- **Past meetings:** listed on the home page for signed-in hosts. They're deleted 30 days after creation, so **export the CSV** if you need the results.
+  Cleanup runs when a host opens the home page (there's no server to run it on a timer).
 
 ## Good to know
-- Results are saved permanently in Firebase. The site never sleeps.
-- "One vote per person" really means one vote per browser. Someone could vote again from a private window or a second phone. That's fine for internal events, but not for anything high-stakes.
-- Names are not verified.
-- Anyone with your host link can control your meeting.
+- "One vote per person" means one vote per browser. A private window or second phone can vote again. That's fine for internal events, not for high-stakes votes.
+- "Anonymous" hides the name on screen. Firebase still stores votes under a hidden browser ID.
+- Names are not verified. Anyone with a meeting's host link can control that meeting.
+- The 100-connection limit counts open pages (participants and host tabs) across all meetings at once.
+- To change the 30 days, edit `KEEP_DAYS` in `src/lib.ts` **and** `2592000000` (30 days in ms) in `database.rules.json`, then publish the rules.
 
 ## Troubleshooting
-- **"Can't connect"**: Anonymous sign-in is not enabled (step 2).
-- **Stuck on loading, or "Not allowed" errors**: the rules weren't published (step 3), or `databaseURL` is wrong (step 4).
-- **"Setup needed"**: `firebase-config.js` still has the placeholder values.
+| Problem | Fix |
+|---|---|
+| "Can't connect" | Enable Anonymous sign-in (setup step 2) |
+| "Not allowed" on actions | Publish the latest `database.rules.json` (setup step 4) |
+| "This website is not in Firebase Authorized domains" | Add the domain (setup step 3) |
+| `auth/operation-not-allowed` | Enable Google sign-in (setup step 2) |
+| Signed in but "Not allowed to host" | The `admins` entry doesn't match your Google email exactly (setup step 6) |
+| Site shows an old version | Wait for the Actions run to finish, then hard-refresh (Ctrl+Shift+R) |
+| "Something went wrong" screen | Reload. If it keeps happening, check the browser console and report it |

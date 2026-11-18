@@ -87,6 +87,26 @@
             },
             "multi": {
               ".validate": "newData.isNumber() && newData.val() >= 2 && newData.val() <= 10 && newData.val() % 1 === 0"
+            },
+            "reveal": {
+              ".validate": "newData.hasChildren(['at', 'winners', 'votes', 'voters'])",
+              "at": {
+                ".validate": "newData.isNumber()"
+              },
+              "winners": {
+                "$i": {
+                  ".validate": "newData.isString() && newData.parent().parent().parent().child('options/' + newData.val()).exists()"
+                }
+              },
+              "votes": {
+                ".validate": "newData.isNumber() && newData.val() >= 0"
+              },
+              "voters": {
+                ".validate": "newData.isNumber() && newData.val() >= 0"
+              },
+              "$other": {
+                ".validate": false
+              }
             }
           }
         },
