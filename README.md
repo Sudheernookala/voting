@@ -3,6 +3,54 @@
 No server needed. GitHub Pages hosts the screens, and Firebase stores votes and sends live updates.
 Free limits (Firebase Spark plan): **100 people connected at the same time**, 1 GB of data, 10 GB of downloads a month.
 
+## Tech stack
+
+| Part | Technology | What it does |
+|---|---|---|
+| Screens (front end) | Plain **HTML, CSS and JavaScript** (ES modules) | All pages: home, host dashboard, participant screen. No framework and no build step. |
+| Hosting | **GitHub Pages** | Serves the static files for free. |
+| Database and live updates | **Firebase Realtime Database** | Stores meetings, votes and feedback, and pushes changes to every screen instantly. |
+| Sign-in | **Firebase Authentication**: Anonymous + Google | Participants get a hidden anonymous ID (used for one vote per person). Hosts sign in with Google. |
+| Security | **Firebase Realtime Database Security Rules** (`database.rules.json`) | Enforces the rules the server used to: one vote per person, host-only controls, private ballots, the host allow-list, multi-choice limits, 30-day deletion. |
+| Firebase SDK | **Firebase JS SDK 12.19.0**, loaded from Google's CDN (`gstatic.com`) | Connects the browser to Firebase. |
+| QR codes | **qrcode-generator 2.0.4** (MIT licence), bundled as `qrcode.js` | Draws the join QR code in the browser. |
+| Testing (during development) | **Firebase Local Emulator Suite** + **Playwright** (headless Chromium) | Ran host and participant flows and attack attempts against the security rules. The test scripts are not part of this repo. |
+
+### How it fits together
+```
+Participant phone ─┐                          ┌─ Firebase Authentication (anonymous / Google)
+Host laptop ───────┼── static files from ─────┤
+                   │   GitHub Pages           └─ Firebase Realtime Database
+                   └── live connection ──────────  (data + live updates, protected by security rules)
+```
+There is no server of our own. The browser talks directly to Firebase, and the security rules are the only thing that stops cheating.
+
+### Files
+| File | Purpose |
+|---|---|
+| `index.html` | Page shell; loads the styles, QR library and app |
+| `app.js` | All app logic: home, host dashboard, participant screen, feedback, cleanup |
+| `style.css` | Look and layout (works on phones and laptops) |
+| `firebase-config.js` | Your Firebase project settings (public by design) |
+| `database.rules.json` | Security rules: paste into Firebase → Realtime Database → Rules |
+| `firebase.json` | Config for the Firebase CLI / local emulator (optional) |
+| `qrcode.js` | QR code library |
+
+### Data stored in Firebase
+| Path | Contents | Who can read it |
+|---|---|---|
+| `admins/` | Emails allowed to host | Hosts on the list |
+| `hostMeetings/<email>/` | Each host's list of their own meetings | That host only |
+| `meetingIndex/` | Meeting creation times, used for 30-day cleanup | Hosts |
+| `hostSecrets/` | Host keys | Nobody (checked by the rules only) |
+| `meetings/<code>/info, categories, feedback` | Title, categories, options, feedback question | Anyone who has joined |
+| `meetings/<code>/voters, ballots, responses, online` | Names, votes, feedback answers, who's online | That meeting's host. Participants can only read their own. |
+
+### Free-plan limits (Firebase Spark)
+- 100 connections at once (open pages, across all meetings)
+- 1 GB stored
+- 10 GB downloaded per month
+
 ## Setup (about 15 minutes, one time)
 
 ### 1. Create a Firebase project
