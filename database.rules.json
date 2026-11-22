@@ -106,6 +106,25 @@
               },
               "$other": {
                 ".validate": false
+              },
+              "places": {
+                "$p": {
+                  ".validate": "$p.matches(/^[0-9]$/) && newData.hasChildren(['place', 'ids', 'votes'])",
+                  "place": {
+                    ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 10"
+                  },
+                  "votes": {
+                    ".validate": "newData.isNumber() && newData.val() >= 0"
+                  },
+                  "ids": {
+                    "$i": {
+                      ".validate": "newData.isString() && newData.parent().parent().parent().parent().parent().child('options/' + newData.val()).exists()"
+                    }
+                  },
+                  "$other": {
+                    ".validate": false
+                  }
+                }
               }
             }
           }

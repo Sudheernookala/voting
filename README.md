@@ -99,6 +99,9 @@ Firebase → Authentication → Settings → **Authorized domains**, or Google s
   Click **🏆 Reveal winner** to close voting and show the winner on every screen. **Reveal again** replays it, and **Reopen** clears it.
 - **Participants:** scan the QR code, then type a name or tick **Join anonymously**. Keep the page open; votes, reveals and feedback forms appear automatically.
 - **Multiple choice:** "Each voter can choose: Up to N options" (2–10). Percentages mean "share of voters who picked it", so they can add up to more than 100%.
+  The results show the **top N** (e.g. 🥇 1st and 🥈 2nd for "up to 2"), and **Reveal top N** announces them in reverse order:
+  2nd place first, then the winner with confetti, then the full podium. Ties share a place (standard sports ranking:
+  5, 5, 3 votes = 1st, 1st, 3rd, so "top 2" shows the two tied winners and no 2nd place).
 - **Feedback:** **Ask for feedback** pops a form on every phone. Hosts can delete single responses or all responses.
   If feedback is still open, someone whose response you deleted is asked again.
 - **Past meetings:** listed on the home page for signed-in hosts. They're deleted 30 days after creation, so **export the CSV** if you need the results.

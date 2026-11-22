@@ -5,7 +5,7 @@ import { r } from '../firebase';
 import { useLive, useServerNow, useToast } from '../hooks';
 import { RevealOverlay, useRevealQueue } from '../components/RevealOverlay';
 import {
-  BASE, initials, maxPicks, niceError, picksOf, sortedOptions,
+  BASE, initials, maxPicks, medal, niceError, ordinal, picksOf, sortedOptions,
   type Ballot, type Category, type Feedback, type FeedbackResponse, type Voter,
 } from '../lib';
 
@@ -105,10 +105,15 @@ function Voting({ base, uid, title, me }: { base: string; uid: string; title: st
       {closed.map(([cid, c]) => {
         const mine = picksOf(ballot[cid]).map(id => c.options?.[id]?.label).filter(Boolean);
         const winners = (c.reveal?.winners ?? []).map(id => c.options?.[id]?.label).filter(Boolean) ?? [];
+        const places = c.reveal?.places ?? [];
         return (
           <div className="card small" key={cid}>
             <b>{c.title}</b> — {mine.length ? `you voted for ${mine.join(', ')}` : 'you did not vote'} · voting closed
-            {winners.length > 0 && <div className="winner" style={{ marginTop: 8 }}>🏆 Winner: {winners.join(' & ')}</div>}
+            {places.length > 1 ? (
+              <div className="winner podium-box" style={{ marginTop: 8 }}>
+                {places.map(p => <div key={p.place}>{medal(p.place)} {ordinal(p.place)}: {(p.ids ?? []).map(id => c.options?.[id]?.label).join(' & ')}</div>)}
+              </div>
+            ) : winners.length > 0 && <div className="winner" style={{ marginTop: 8 }}>🏆 Winner: {winners.join(' & ')}</div>}
           </div>
         );
       })}

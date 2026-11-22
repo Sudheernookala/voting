@@ -5,7 +5,12 @@ import { r } from './firebase';
 // ---------- data types (same structure as database.rules.json) ----------
 export type Status = 'draft' | 'open' | 'closed';
 export interface Option { label: string; order: number }
-export interface Reveal { at: number; winners: string[]; votes: number; voters: number }
+/** One finishing place. Several ids = a tie for that place. */
+export interface Place { place: number; ids: string[]; votes: number }
+export interface Reveal {
+  at: number; winners: string[]; votes: number; voters: number;
+  places?: Place[];        // multiple choice: top N (1st, 2nd, ...)
+}
 export interface Category {
   title: string; status: Status; createdAt: number;
   options: Record<string, Option>;
@@ -98,12 +103,38 @@ export async function cleanupOldMeetings() {
   }
 }
 
-/** Closes voting and publishes the winner, which triggers the reveal animation on every screen. */
-export const revealWinner = (code: string, catId: string, res: Results) =>
-  update(r(`meetings/${code}/categories/${catId}`), {
+/**
+ * Top places using standard sports ranking: tied options share a place and the next place is skipped
+ * (5, 5, 3 votes -> 1st, 1st, 3rd). Returns places up to `n` (e.g. top 2), ignoring options with no votes.
+ */
+export function rankPlaces(options: { id: string; count: number }[], n: number): Place[] {
+  const voted = options.filter(o => o.count > 0);
+  const places: Place[] = [];
+  for (const count of [...new Set(voted.map(o => o.count))].sort((a, b) => b - a)) {
+    const place = 1 + voted.filter(o => o.count > count).length;
+    if (place > n) break;
+    places.push({ place, ids: voted.filter(o => o.count === count).map(o => o.id), votes: count });
+  }
+  return places;
+}
+
+/** How many places a category ranks: top N for "up to N" categories, otherwise just the winner. */
+export const placesToShow = (c: Category) => maxPicks(c);
+
+export const ordinal = (n: number) => n + (['th', 'st', 'nd', 'rd'][(n % 100 - 20) % 10] || ['th', 'st', 'nd', 'rd'][n % 100] || 'th');
+export const medal = (place: number) => ['🥇', '🥈', '🥉'][place - 1] || '🏅';
+
+/** Closes voting and publishes the result, which triggers the reveal animation on every screen. */
+export const revealWinner = (code: string, catId: string, cat: Category, res: Results) => {
+  const places = rankPlaces(res.options, placesToShow(cat));
+  return update(r(`meetings/${code}/categories/${catId}`), {
     status: 'closed',
-    reveal: { at: serverTimestamp(), winners: res.winners.map(w => w.id), votes: res.max, voters: res.total },
+    reveal: {
+      at: serverTimestamp(), winners: res.winners.map(w => w.id), votes: res.max, voters: res.total,
+      ...(placesToShow(cat) > 1 ? { places } : {}),
+    },
   });
+};
 
 // ---------- CSV export ----------
 export function exportCsv(code: string, categories: Record<string, Category>, ballots: Record<string, Record<string, Ballot>>,

@@ -7,7 +7,7 @@ import { useLive, useServerNow, useToast } from '../hooks';
 import { RevealOverlay, useRevealQueue } from '../components/RevealOverlay';
 import { People } from '../components/People';
 import {
-  BASE, computeResults, exportCsv, maxPicks, niceError, plural, randHex, revealWinner,
+  BASE, computeResults, exportCsv, maxPicks, medal, niceError, ordinal, placesToShow, plural, randHex, rankPlaces, revealWinner,
   type Ballot, type Category, type Feedback, type FeedbackResponse, type Voter,
 } from '../lib';
 
@@ -201,14 +201,18 @@ function CategoryCard({ code, cid, cat, ballots, voters, voterCount }: {
   const res = computeResults(cat, cid, ballots, voters);
   const turnout = voterCount ? Math.round(res.total / voterCount * 100) : 0;
   const mp = maxPicks(cat);
+  const topN = placesToShow(cat);
+  const places = topN > 1 ? rankPlaces(res.options, topN) : [];
+  const placeOf = new Map(places.flatMap(p => p.ids.map(id => [id, p.place] as const)));
+  const label = (id: string) => cat.options?.[id]?.label ?? '?';
   const path = `meetings/${code}/categories/${cid}`;
   const act = async (fn: () => Promise<unknown>) => { try { await fn(); } catch (err) { toast(niceError(err), true); } };
 
   const doReveal = () => {
     const msg = cat.status === 'open'
-      ? 'This closes voting and shows the winner on every screen. Continue?'
-      : 'Show the winner on every screen?';
-    if (confirm(msg)) act(() => revealWinner(code, cid, res));
+      ? `This closes voting and shows the ${topN > 1 ? `top ${topN}` : 'winner'} on every screen. Continue?`
+      : `Show the ${topN > 1 ? `top ${topN}` : 'winner'} on every screen?`;
+    if (confirm(msg)) act(() => revealWinner(code, cid, cat, res));
   };
 
   const ranked = [...res.options].sort((a, b) => b.count - a.count || a.order - b.order);
@@ -225,7 +229,7 @@ function CategoryCard({ code, cid, cat, ballots, voters, voterCount }: {
           : <button className="btn sm green" data-act="open" data-id={cid}
               onClick={() => act(() => update(r(path), { status: 'open', reveal: null }))}>{cat.status === 'draft' ? 'Start voting' : 'Reopen'}</button>}
         {res.total > 0 && cat.status !== 'draft' && (
-          <button className="btn sm gold" data-reveal={cid} onClick={doReveal}>🏆 {cat.reveal ? 'Reveal again' : 'Reveal winner'}</button>
+          <button className="btn sm gold" data-reveal={cid} onClick={doReveal}>🏆 {cat.reveal ? 'Reveal again' : topN > 1 ? `Reveal top ${topN}` : 'Reveal winner'}</button>
         )}
         <button className="btn sm red" data-act="delete" data-id={cid}
           onClick={() => confirm('Delete this category? Its results will no longer be shown.') && act(() => remove(r(path)))}>Delete</button>
@@ -237,16 +241,25 @@ function CategoryCard({ code, cid, cat, ballots, voters, voterCount }: {
       <div className="bars">
         {ranked.map(o => {
           const pct = res.total ? Math.round(o.count / res.total * 100) : 0;
-          const win = res.max > 0 && o.count === res.max;
+          const place = topN > 1 ? placeOf.get(o.id) : (res.max > 0 && o.count === res.max ? 1 : undefined);
           return (
-            <div className={`bar ${win ? 'win' : ''}`} key={o.id}>
-              <div className="bar-top"><span>{win ? '🏆 ' : ''}{o.label}</span><span><b>{o.count}</b> <span className="muted">({pct}%)</span></span></div>
+            <div className={`bar ${place === 1 ? 'win' : place ? 'place' : ''}`} key={o.id}>
+              <div className="bar-top"><span>{place ? (topN > 1 ? medal(place) : '🏆') + ' ' : ''}{o.label}</span><span><b>{o.count}</b> <span className="muted">({pct}%)</span></span></div>
               <div className="bar-track"><div className="bar-fill" style={{ width: `${pct}%` }} /></div>
             </div>
           );
         })}
       </div>
-      {res.total > 0 && (res.tie
+      {topN > 1 && places.length > 0 && (
+        <div className="winner podium-box">
+          <div className="small" style={{ marginBottom: 4 }}>{cat.status === 'closed' ? `Top ${topN}` : `Top ${topN} so far`}</div>
+          {places.map(p => (
+            <div key={p.place}>{medal(p.place)} <b>{ordinal(p.place)}:</b> {p.ids.map(label).join(' & ')}
+              <span className="muted"> · {plural(p.votes, 'vote')}{p.ids.length > 1 ? ' each (tie)' : ''}</span></div>
+          ))}
+        </div>
+      )}
+      {topN === 1 && res.total > 0 && (res.tie
         ? <div className="winner tie">🤝 Tie between {res.winners.map(w => w.label).join(' & ')} ({plural(res.max, 'vote')} each)</div>
         : <div className="winner">🏆 {cat.status === 'closed' ? 'Winner' : 'Leading'}: {res.winners[0].label} with {plural(res.max, 'vote')}</div>)}
       <details data-cat={cid}><summary>Verify: who voted for whom</summary>

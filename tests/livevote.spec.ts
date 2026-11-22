@@ -188,3 +188,50 @@ test('host sees past meetings and can delete them', async ({ browser }) => {
   await item.locator(`[data-del="${code}"]`).click();
   await expect(item).toHaveCount(0);
 });
+
+test('top 2: host sees 1st and 2nd, reveal announces 2nd then 1st', async ({ browser }) => {
+  const { host, code } = await hostCreatesMeeting(browser, 'Top two');
+  await addCategory(host, 'Best Players', 'Asha, Ravi, Meena, Tom', 2);
+  const v = [];
+  for (const n of ['V1', 'V2', 'V3']) v.push(await joinAs(browser, code, n));
+  await vote(v[0], 'Best Players', ['Asha', 'Ravi']);   // Asha 3, Ravi 2, Meena 1
+  await vote(v[1], 'Best Players', ['Asha', 'Ravi']);
+  await vote(v[2], 'Best Players', ['Asha', 'Meena']);
+
+  const c = card(host, 'Best Players');
+  await expect(c.locator('.podium-box')).toContainText('1st: Asha');
+  await expect(c.locator('.podium-box')).toContainText('2nd: Ravi');
+  await expect(c.locator('.podium-box')).not.toContainText('Meena');
+  await expect(c.locator('[data-reveal]')).toHaveText(/Reveal top 2/);
+
+  // a participant can't publish a fake ranking
+  const id = await c.locator('[data-reveal]').getAttribute('data-reveal');
+  expect(await tryDb(v[0], `(d, db, uid, a) => d.update(d.ref(db, a), { status: 'closed', reveal: { at: 1, winners: ['x'], votes: 9, voters: 9, places: [{ place: 1, ids: ['x'], votes: 9 }] } })`,
+    `meetings/${code}/categories/${id}`)).toBe('DENIED');
+
+  host.once('dialog', d => d.accept());
+  await c.locator('[data-reveal]').click();
+  const p = v[0];
+  await expect(p.locator('.reveal')).toContainText('And the top 2 are…');
+  await expect(p.locator('.reveal')).toContainText('2nd place', { timeout: 6000 });
+  await expect(p.locator('.reveal .reveal-name')).toHaveText('Ravi');
+  await expect(p.locator('.reveal .reveal-name')).toHaveText('Asha', { timeout: 6000 }); // winner comes last
+  await expect(p.locator('.reveal .podium')).toContainText('2nd: Ravi');
+  await p.locator('.reveal').getByRole('button', { name: 'Close' }).click();
+  const closed = p.locator('.card', { hasText: 'Best Players' });
+  await expect(closed).toContainText('1st: Asha');
+  await expect(closed).toContainText('2nd: Ravi');
+});
+
+test('top 2 with a tie for 2nd shows both as 2nd', async ({ browser }) => {
+  const { host, code } = await hostCreatesMeeting(browser, 'Tie for second');
+  await addCategory(host, 'Best Ideas', 'Alpha, Beta, Gamma', 2);
+  const a = await joinAs(browser, code, 'A');
+  const b = await joinAs(browser, code, 'B');
+  await vote(a, 'Best Ideas', ['Alpha', 'Beta']);   // Alpha 2, Beta 1, Gamma 1
+  await vote(b, 'Best Ideas', ['Alpha', 'Gamma']);
+  const box = card(host, 'Best Ideas').locator('.podium-box');
+  await expect(box).toContainText('1st: Alpha');
+  await expect(box).toContainText(/2nd: (Beta & Gamma|Gamma & Beta)/);
+  await expect(box).toContainText('1 vote each (tie)');
+});

@@ -136,3 +136,9 @@ input:disabled { background: var(--bg); color: var(--muted); }
 .reveal-meta { opacity: .8; margin-bottom: 22px; font-size: clamp(.95rem, 2.6vw, 1.2rem); }
 @keyframes pop { 0% { transform: scale(.4); opacity: 0; } 60% { transform: scale(1.08); opacity: 1; } 100% { transform: scale(1); } }
 @media (prefers-reduced-motion: reduce) { .reveal-count, .reveal-trophy, .reveal-name { animation: none; } }
+.bar.place .bar-fill { background: linear-gradient(90deg, #8d97ad, #c3cad9); }
+.podium-box div + div { margin-top: 2px; }
+.reveal-step { animation: fade .4s; }
+.reveal-name.silver { background: linear-gradient(90deg, #cfd6e6, #ffffff, #cfd6e6); -webkit-background-clip: text; background-clip: text; }
+.podium { list-style: none; padding: 0; margin: 0 0 22px; font-size: clamp(1rem, 3vw, 1.35rem); }
+.podium li { margin: 4px 0; } .podium span { opacity: .7; }
